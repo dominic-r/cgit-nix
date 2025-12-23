@@ -72,7 +72,7 @@ in {
       max-repo-count = 50;
       cache-size = 1000;
       snapshots = "tar.gz tar.xz zip";
-      clone-url = "https://git.sdko.net/$CGIT_REPO_URL git@git.sdko.net:$CGIT_REPO_URL";
+      clone-url = "https://git.sdko.net/$CGIT_REPO_URL git@git.sdko.net:repos/$CGIT_REPO_URL";
       source-filter = "${pkgs.cgit}/lib/cgit/filters/syntax-highlighting.py";
       about-filter = "${pkgs.cgit}/lib/cgit/filters/about-formatting.sh";
     };
