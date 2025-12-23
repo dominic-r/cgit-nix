@@ -22,6 +22,7 @@ STDIN.each_line do |line|
 
   # Push to Codeberg mirror
   puts "Mirroring to #{mirror_url}..."
+  ENV['GIT_SSH_COMMAND'] = 'ssh -i /home/git/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new'
   system("git push --force #{mirror_url} master:master")
   if $?.success?
     puts "Mirror complete."

@@ -106,6 +106,7 @@ in {
   systemd.tmpfiles.rules = [
     "d /home/git 0755 git users -"
     "d /home/git/repos 0755 git users -"
+    "d /home/git/.ssh 0700 git users -"
     "d /repos 0755 root root -"
     "d /etc/ssl/git.sdko.net 0750 root nginx -"
   ];
@@ -120,10 +121,6 @@ in {
       RemainAfterExit = true;
     };
     script = ''
-      # Fix permissions for cgit to read repos
-      chmod 755 /home/git
-      chmod -R o+rX /home/git/repos 2>/dev/null || true
-
       init_repo() {
         local name=$1
         local desc=$2
@@ -135,8 +132,6 @@ in {
         if [ ! -L /repos/$name.git ]; then
           ln -sf /home/git/repos/$name.git /repos/$name.git
         fi
-        # Ensure repo is readable by cgit
-        chmod -R o+rX /home/git/repos/$name.git
       }
 
       install_hooks() {
@@ -159,6 +154,20 @@ in {
 
       install_hooks "s"
       install_hooks "s-test"
+    '';
+  };
+
+  # Fix permissions on every boot/switch
+  systemd.services.fix-git-perms = {
+    description = "Fix git repository permissions for cgit";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "init-git-repos.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+    };
+    script = ''
+      chmod 755 /home/git
+      chmod -R o+rX /home/git/repos 2>/dev/null || true
     '';
   };
 
