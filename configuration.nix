@@ -139,19 +139,26 @@ in {
         chmod -R o+rX /home/git/repos/$name.git
       }
 
-      install_merge_hook() {
+      install_hooks() {
         local name=$1
         mkdir -p /home/git/repos/$name.git/hooks
+
+        # Pre-receive: enforce merge commits on master
         cp ${hooks}/pre-receive-merge-only /home/git/repos/$name.git/hooks/pre-receive
         chmod +x /home/git/repos/$name.git/hooks/pre-receive
-        chown git:users /home/git/repos/$name.git/hooks/pre-receive
+
+        # Post-receive: mirror to Codeberg
+        cp ${hooks}/post-receive-mirror /home/git/repos/$name.git/hooks/post-receive
+        chmod +x /home/git/repos/$name.git/hooks/post-receive
+
+        chown -R git:users /home/git/repos/$name.git/hooks
       }
 
       init_repo "s" "Monorepo."
       init_repo "s-test" "Monorepo testing."
 
-      # Only s-test has the merge commit enforcement hook
-      install_merge_hook "s-test"
+      install_hooks "s"
+      install_hooks "s-test"
     '';
   };
 

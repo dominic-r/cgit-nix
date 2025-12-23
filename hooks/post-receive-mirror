@@ -1,0 +1,31 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# post-receive hook - Mirror master branch to Codeberg
+#
+# Mirrors to https://codeberg.org/02/{repo-name}-mirror
+
+CODEBERG_ORG = '02'
+
+# Get repo name from the directory
+repo_path = Dir.pwd
+repo_name = File.basename(repo_path, '.git')
+mirror_name = "#{repo_name}-mirror"
+mirror_url = "git@codeberg.org:#{CODEBERG_ORG}/#{mirror_name}.git"
+
+STDIN.each_line do |line|
+  _oldrev, newrev, refname = line.split
+
+  # Only mirror master branch
+  next unless refname == 'refs/heads/master'
+  next if newrev == '0' * 40
+
+  # Push to Codeberg mirror
+  puts "Mirroring to #{mirror_url}..."
+  system("git push --force #{mirror_url} master:master")
+  if $?.success?
+    puts "Mirror complete."
+  else
+    warn "Warning: Mirror to Codeberg failed (non-fatal)"
+  end
+end
