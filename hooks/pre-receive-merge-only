@@ -1,0 +1,35 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# pre-receive hook - Enforce merge commits on master
+#
+# Only allows pushes to master if commit message starts with "Merge branch"
+
+STDIN.each_line do |line|
+  oldrev, newrev, refname = line.split
+
+  # Skip deletions
+  next if newrev == '0' * 40
+
+  # Only check pushes to master
+  next unless refname == 'refs/heads/master'
+
+  # Get commits being pushed
+  if oldrev == '0' * 40
+    commits = [newrev]
+  else
+    commits = `git rev-list #{oldrev}..#{newrev}`.strip.split("\n")
+  end
+
+  commits.each do |sha|
+    msg = `git log -1 --pretty=format:'%s' #{sha}`.strip
+    unless msg.match?(/^Merge branch '.+' into 'master'/)
+      warn "Error: Direct push to master is not allowed."
+      warn "Use ./bin/merge <branch> to merge your changes."
+      warn "Commit #{sha[0..7]}: #{msg}"
+      exit 1
+    end
+  end
+end
+
+exit 0

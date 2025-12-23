@@ -6,6 +6,7 @@ let
     url = "https://git.zx2c4.com/cgit.css";
     sha256 = "08xz7khasdvdxbmw07jsrnx18zhp6hm51xkfc3hlkavpvmxbs5qm";
   };
+  hooks = ./hooks;
 in {
   imports = [
     (modulesPath + "/profiles/qemu-guest.nix")
@@ -17,6 +18,7 @@ in {
   environment.systemPackages = with pkgs; [
     vim
     ghostty.terminfo
+    ruby
   ];
 
   services.tailscale.enable = true;
@@ -118,6 +120,10 @@ in {
       RemainAfterExit = true;
     };
     script = ''
+      # Fix permissions for cgit to read repos
+      chmod 755 /home/git
+      chmod -R o+rX /home/git/repos 2>/dev/null || true
+
       init_repo() {
         local name=$1
         local desc=$2
@@ -129,9 +135,23 @@ in {
         if [ ! -L /repos/$name.git ]; then
           ln -sf /home/git/repos/$name.git /repos/$name.git
         fi
+        # Ensure repo is readable by cgit
+        chmod -R o+rX /home/git/repos/$name.git
       }
+
+      install_merge_hook() {
+        local name=$1
+        mkdir -p /home/git/repos/$name.git/hooks
+        cp ${hooks}/pre-receive-merge-only /home/git/repos/$name.git/hooks/pre-receive
+        chmod +x /home/git/repos/$name.git/hooks/pre-receive
+        chown git:users /home/git/repos/$name.git/hooks/pre-receive
+      }
+
       init_repo "s" "Monorepo."
       init_repo "s-test" "Monorepo testing."
+
+      # Only s-test has the merge commit enforcement hook
+      install_merge_hook "s-test"
     '';
   };
 
