@@ -1,11 +1,6 @@
 { config, pkgs, lib, modulesPath, ... }:
 
-# For a  nice dark mode, still need to fix the font thing
 let
-  customCss = pkgs.fetchurl {
-    url = "https://git.zx2c4.com/cgit.css";
-    sha256 = "08xz7khasdvdxbmw07jsrnx18zhp6hm51xkfc3hlkavpvmxbs5qm";
-  };
   hooks = ./hooks;
 in {
   imports = [
@@ -40,6 +35,7 @@ in {
       shell = "${pkgs.git}/bin/git-shell";
       openssh.authorizedKeys.keys = [
         "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPkyXI1VJ7hDm2AA+ta5yKOTdqjFBfNWKUuhUKuGrMri"
+        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH7guBCBEx3TZ+2S6m+aKBg9ABSS+0nRvPcu7GjTOwVf"
       ];
     };
   };
@@ -63,8 +59,6 @@ in {
     settings = {
       root-title = "Git Repositories";
       root-desc = "Public git repositories";
-      css = "/custom.css";
-      logo = "/cgit.png";
       enable-index-owner = 0;
       enable-commit-graph = 1;
       enable-log-filecount = 1;
@@ -89,14 +83,12 @@ in {
     };
     commonHttpConfig = ''
       more_set_headers "Server: SDKO Git Server";
+      more_set_headers "Via: 1.1 sws-gateway";
     '';
     virtualHosts."git.sdko.net" = {
       forceSSL = true;
       sslCertificate = "/etc/ssl/git.sdko.net/fullchain.cer";
       sslCertificateKey = "/etc/ssl/git.sdko.net/key.pem";
-      locations."= /custom.css" = {
-        alias = customCss;
-      };
     };
   };
 
@@ -136,11 +128,16 @@ in {
 
       install_hooks() {
         local name=$1
+        local skip_prereceive=$2
         mkdir -p /home/git/repos/$name.git/hooks
 
         # Pre-receive: enforce merge commits on master
-        cp ${hooks}/pre-receive-merge-only /home/git/repos/$name.git/hooks/pre-receive
-        chmod +x /home/git/repos/$name.git/hooks/pre-receive
+        if [ "$skip_prereceive" != "true" ]; then
+          cp ${hooks}/pre-receive-merge-only /home/git/repos/$name.git/hooks/pre-receive
+          chmod +x /home/git/repos/$name.git/hooks/pre-receive
+        else
+          rm -f /home/git/repos/$name.git/hooks/pre-receive
+        fi
 
         # Post-receive: mirror to Codeberg
         cp ${hooks}/post-receive-mirror /home/git/repos/$name.git/hooks/post-receive
@@ -151,9 +148,13 @@ in {
 
       init_repo "s" "Monorepo."
       init_repo "s-test" "Monorepo testing."
+      init_repo "hl-bootstrap-automatic" "Homelab bootstrap (auto-synced from monorepo)."
+      init_repo "m" "Mom's project."
 
       install_hooks "s"
       install_hooks "s-test"
+      install_hooks "hl-bootstrap-automatic" true
+      install_hooks "m"
     '';
   };
 
