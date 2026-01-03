@@ -1,17 +1,17 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# post-receive hook - Mirror master branch to Codeberg
+# post-receive hook - Mirror master branch to SourceHut
 #
-# Mirrors to https://codeberg.org/02/{repo-name}-mirror
+# Mirrors to https://git.sr.ht/~dominic/{repo-name}-mirror
 
-CODEBERG_ORG = '02'
+SRHT_USER = '~dominic'
 
 # Get repo name from the directory
 repo_path = Dir.pwd
 repo_name = File.basename(repo_path, '.git')
 mirror_name = "#{repo_name}-mirror"
-mirror_url = "git@codeberg.org:#{CODEBERG_ORG}/#{mirror_name}.git"
+mirror_url = "git@git.sr.ht:#{SRHT_USER}/#{mirror_name}"
 
 STDIN.each_line do |line|
   _oldrev, newrev, refname = line.split
@@ -20,13 +20,13 @@ STDIN.each_line do |line|
   next unless refname == 'refs/heads/master'
   next if newrev == '0' * 40
 
-  # Push to Codeberg mirror
+  # Push to SourceHut mirror
   puts "Mirroring to #{mirror_url}..."
   ENV['GIT_SSH_COMMAND'] = 'ssh -i /home/git/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new'
   system("git push --force #{mirror_url} master:master")
   if $?.success?
     puts "Mirror complete."
   else
-    warn "Warning: Mirror to Codeberg failed (non-fatal)"
+    warn "Warning: Mirror to SourceHut failed (non-fatal)"
   end
 end
