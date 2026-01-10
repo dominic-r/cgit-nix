@@ -2,6 +2,69 @@
 
 let
   hooks = ./hooks;
+
+  # authentik forward auth configuration (shared between vhosts)
+  authentikOutpost = "https://sso.sdko.net/outpost.goauthentik.io";
+
+  forwardAuthConfig = ''
+    auth_request        /outpost.goauthentik.io/auth/nginx;
+    error_page          401 = @goauthentik_proxy_signin;
+    auth_request_set    $auth_cookie $upstream_http_set_cookie;
+    add_header          Set-Cookie $auth_cookie;
+
+    # Translate headers from the outpost back to the upstream
+    auth_request_set $authentik_username $upstream_http_x_authentik_username;
+    auth_request_set $authentik_groups $upstream_http_x_authentik_groups;
+    auth_request_set $authentik_entitlements $upstream_http_x_authentik_entitlements;
+    auth_request_set $authentik_email $upstream_http_x_authentik_email;
+    auth_request_set $authentik_name $upstream_http_x_authentik_name;
+    auth_request_set $authentik_uid $upstream_http_x_authentik_uid;
+
+    proxy_set_header X-authentik-username $authentik_username;
+    proxy_set_header X-authentik-groups $authentik_groups;
+    proxy_set_header X-authentik-entitlements $authentik_entitlements;
+    proxy_set_header X-authentik-email $authentik_email;
+    proxy_set_header X-authentik-name $authentik_name;
+    proxy_set_header X-authentik-uid $authentik_uid;
+  '';
+
+  # Shared authentik locations for each vhost
+  authentikLocations = {
+    # All requests to /outpost.goauthentik.io must be accessible without authentication
+    "/outpost.goauthentik.io" = {
+      proxyPass = authentikOutpost;
+      extraConfig = ''
+        proxy_ssl_verify              off;
+        proxy_set_header              Host sso.sdko.net;
+        proxy_set_header              X-Forwarded-Host $host;
+        proxy_set_header              X-Original-URL $scheme://$http_host$request_uri;
+        add_header                    Set-Cookie $auth_cookie;
+        auth_request_set              $auth_cookie $upstream_http_set_cookie;
+        proxy_pass_request_body       off;
+        proxy_set_header              Content-Length "";
+      '';
+    };
+
+    # When the /auth endpoint returns 401, redirect to /start to initiate SSO
+    "@goauthentik_proxy_signin" = {
+      extraConfig = ''
+        internal;
+        add_header Set-Cookie $auth_cookie;
+        return 302 /outpost.goauthentik.io/start?rd=$scheme://$http_host$request_uri;
+      '';
+    };
+  };
+
+  # Common SSL config
+  sslConfig = {
+    forceSSL = true;
+    sslCertificate = "/etc/ssl/git.sdko.net/fullchain.cer";
+    sslCertificateKey = "/etc/ssl/git.sdko.net/key.pem";
+    extraConfig = ''
+      proxy_buffers 8 16k;
+      proxy_buffer_size 32k;
+    '';
+  };
 in {
   imports = [
     (modulesPath + "/profiles/qemu-guest.nix")
@@ -51,6 +114,17 @@ in {
 
   networking.firewall.allowedTCPPorts = [ 22 80 443 ];
 
+  # Prometheus node exporter
+  services.prometheus.exporters.node = {
+    enable = true;
+    port = 9100;
+    listenAddress = "127.0.0.1";
+    enabledCollectors = [
+      "systemd"
+      "processes"
+    ];
+  };
+
   # cgit configuration
   services.cgit.main = {
     enable = true;
@@ -77,18 +151,48 @@ in {
     enable = true;
     recommendedOptimisation = true;
     recommendedGzipSettings = true;
+    recommendedProxySettings = false;
     serverTokens = false;
     package = pkgs.nginxMainline.override {
       modules = [ pkgs.nginxModules.moreheaders ];
     };
+
     commonHttpConfig = ''
       more_set_headers "Server: SDKO Git Server";
       more_set_headers "Via: 1.1 sws-gateway";
+
+      map $http_upgrade $connection_upgrade_keepalive {
+        default upgrade;
+        ""      "";
+      }
     '';
-    virtualHosts."git.sdko.net" = {
-      forceSSL = true;
-      sslCertificate = "/etc/ssl/git.sdko.net/fullchain.cer";
-      sslCertificateKey = "/etc/ssl/git.sdko.net/key.pem";
+
+    virtualHosts."git.sdko.net" = sslConfig // {
+      locations = authentikLocations // {
+        "/" = {
+          extraConfig = forwardAuthConfig + ''
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            # WebSocket support
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade_keepalive;
+          '';
+        };
+      };
+    };
+
+    virtualHosts."nodeexporter-git-svc.sdko.net" = sslConfig // {
+      locations = authentikLocations // {
+        "/" = {
+          proxyPass = "http://127.0.0.1:9100";
+          extraConfig = forwardAuthConfig + ''
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+          '';
+        };
+      };
     };
   };
 
