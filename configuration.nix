@@ -4,6 +4,9 @@ let
   hooks = ./hooks;
 
   # authentik forward auth configuration (shared between vhosts)
+  # NOTE: Apps are pointed to authentik-proxy-cloud-01, not the embedded outpost
+  # as one might assume due to the Traefik router rule at:
+  # https://git.sdko.net/s.git/tree/infra/cluster/cloud-01/authentik-proxy-cloud-01/docker-compose.yml#n24
   authentikOutpost = "https://sso.sdko.net/outpost.goauthentik.io";
 
   forwardAuthConfig = ''
