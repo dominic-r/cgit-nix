@@ -133,6 +133,7 @@ in {
     enable = true;
     nginx.virtualHost = "git.sdko.net";
     scanPath = "/repos";
+    gitHttpBackend.checkExportOkFiles = false;
     settings = {
       root-title = "Git Repositories";
       root-desc = "Public git repositories";
